@@ -16,18 +16,16 @@ public class Agent {
 	 * @return true if moving onto the tile watered the tomato
 	 */
 	public boolean move(Move m) {
-		int newX = x + m.dx;
-		int newY = y + m.dy;
+		Position newPos = env.getPositionWhenMoving(x, y, m);
 		
-		if(env.getTile(newX, newY) != Tile.WALL) {
-			this.x = newX;
-			this.y = newY;
-			
-			if(env.getTile(newX, newY) == Tile.UNWATERED_TOMATO) {
-				env.setTile(newX, newY, Tile.WATERED_TOMATO);
-				return true;
-			}
+		this.x = newPos.x;
+		this.y = newPos.y;
+		
+		if(env.getTile(newPos.x, newPos.y) == Tile.UNWATERED_TOMATO) {
+			env.setTile(newPos.x, newPos.y, Tile.WATERED_TOMATO);
+			return true;
 		}
+		
 		return false;
 	}
 }
