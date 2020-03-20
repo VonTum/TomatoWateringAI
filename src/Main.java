@@ -3,27 +3,33 @@ import java.util.Random;
 public class Main {
 	
 	static Environment env;
+	static Agent agent;
+	static RestrainingBolt bolt;
 	static QLearner learner;
+	static final int actionCount = 100;
+	static final int learningEpochs = 100000;
 	
 	public static void main(String[] args) throws InterruptedException {
-		env = new Environment(8,  6, 35879879654161L);
+		env = new Environment(6,  6, 35879879654161L);
+		agent = new Agent(env, 2, 2);
+		bolt = new BasicRestrainingBolt(env, agent);
 		
+		learner = new QLearner(4, 0.9, 0.90, 0.3, env.getWidth() - 2, env.getHeight() - 2, 1 << env.getNumberOfTomatoes(), bolt.getNumberOfStates());
+
 		
-		learner = new QLearner(4, 0.9, 0.90, 0.3, env.getWidth() - 2, env.getHeight() - 2, 1 << env.getNumberOfTomatoes());
-		
-		int actionCount = 100;
-		
-		learn(100000, actionCount);
+		learn(learningEpochs, actionCount);
 		//System.out.println(learner);
 		
 		//Thread.sleep(5000);
 		
 		env.reset();
-		Agent agent = new Agent(env, 2, 2);
+		agent.x = 2;
+		agent.y = 2;
+		bolt.reset();
 		for(int i = 0; i < actionCount; i++) {
-			int[] observations = {agent.x - 1, agent.y - 1, env.getTomatoBitmap()};
-			int action = learner.getBestAction(observations);
+			int action = learner.getBestAction(getCurrentObservations());
 			agent.move(Move.values()[action]);
+			bolt.applyAction(action);
 			dryout();
 			
 			System.out.println(env);
@@ -45,28 +51,35 @@ public class Main {
 		}
 	}
 	
+	static int[] getCurrentObservations() {
+		return new int[]{agent.x - 1, agent.y - 1, env.getTomatoBitmap(), bolt.getCurrentState()};
+	}
+	
 	private static void learn(int episodes, int steps) {
 		for(int i = 0; i < episodes; i++) {
 			if(i%1000 == 0) System.out.print("Episode: " + i);
 			
 			env.reset();
-			Agent agent = new Agent(env, 2, 2);
+			agent.x = 2;
+			agent.y = 2;
+			bolt.reset();
 			
 			QLearner.History hist = learner.new History();
 			for(int step = 0; step < steps; step++) {
-				int[] observations = {agent.x - 1, agent.y - 1, env.getTomatoBitmap()};
+				int[] observations = getCurrentObservations();
 				int action = learner.getNextAction(observations);
 				
 				boolean wateredPlant = agent.move(Move.values()[action]);
+				double boltReward = bolt.applyAction(action);
 				dryout();
 				
-				double reward = wateredPlant? 10.0 : -0.5;
+				double reward = boltReward + (wateredPlant? 10.0 : -0.5);
 				
 				
 				hist.visit(action, reward, observations);
 			}
 			
-			hist.apply(new int[]{agent.x - 1, agent.y - 1, env.getTomatoBitmap()});
+			hist.apply(getCurrentObservations());
 			
 			//System.out.println(hist);
 			

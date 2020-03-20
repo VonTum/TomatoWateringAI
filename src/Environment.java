@@ -94,7 +94,6 @@ public class Environment {
 	}
 	
 	public int getStateForPos(int x, int y) {
-		int w = getWidth() - 2;
 		int h = getHeight() - 2;
 		
 		return (y - 1) * h + (x - 1);
@@ -105,7 +104,6 @@ public class Environment {
 	}
 	
 	public Position getPosForState(int dfaState) {
-		int w = getWidth() - 2;
 		int h = getHeight() - 2;
 		
 		int x = dfaState % h;
