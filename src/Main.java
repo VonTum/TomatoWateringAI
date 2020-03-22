@@ -19,24 +19,26 @@ public class Main {
 		learner = new QLearner(4, 0.9, 0.90, 0.3, env.getWidth() - 2, env.getHeight() - 2, 1 << env.getNumberOfTomatoes(), bolt.getNumberOfStates());
 
 		
-		List<Double> avgRewards = learn(learningEpochs, actionCount);
+		RewardHistories rewardHistory = learn(learningEpochs, actionCount);
+		
+		
+		
+		
 		//avgRewards.plot;
 		
 		//Thread.sleep(5000);
 		
-		env.reset();
-		agent.x = 2;
-		agent.y = 2;
-		bolt.reset();
+		reset();
 		for(int i = 0; i < actionCount; i++) {
 			int action = learner.getBestAction(getCurrentObservations());
 			agent.move(Move.values()[action]);
 			bolt.applyAction(action);
+
 			dryout();
-			
 			System.out.println(env);
 			
 			Thread.sleep(500);
+
 		}
 	}
 	
@@ -57,31 +59,48 @@ public class Main {
 		return new int[]{agent.x - 1, agent.y - 1, env.getTomatoBitmap(), bolt.getCurrentState()};
 	}
 
-	private static List<Double> learn(int episodes, int steps) {
+	private static RewardHistories learn(int episodes, int steps) {
 		List<Double> rewards = new ArrayList<>();
 		List<Double> avgRewards = new ArrayList<>();
+		
+		RewardHistories fullHistory = new RewardHistories(episodes);
 		
 		for(int i = 0; i < episodes; i++) {
 			if(i%1000 == 0) System.out.print("Episode: " + i);
 			
-			env.reset();
-			agent.x = 2;
-			agent.y = 2;
-			bolt.reset();
+			double totalBaseReward = 0.0;
+			double totalBoltReward = 0.0;
+			double totalShapingReward = 0.0;
+			
+			reset();
 			
 			QLearner.History hist = learner.new History();
+			double currentPotential = getPotentialForState();
 			for(int step = 0; step < steps; step++) {
 				int[] observations = getCurrentObservations();
 				int action = learner.getNextAction(observations);
 				
 				boolean wateredPlant = agent.move(Move.values()[action]);
-				double boltReward = bolt.applyAction(action);
-				dryout();
+
+				double baseReward = (wateredPlant? 10.0 : -0.5);
 				
-				double reward = boltReward + (wateredPlant? 10.0 : -0.5);
+				double boltReward = bolt.applyAction(action);
+				
+				double nextPotential = getPotentialForState();
+				double shapingReward = learner.discount * nextPotential - currentPotential;
+				currentPotential = nextPotential;
+				
+				
+				totalBaseReward += baseReward;
+				totalBoltReward += boltReward;
+				totalShapingReward += shapingReward;
+				
+				double reward = baseReward + boltReward + shapingReward;
 				
 				
 				hist.visit(action, reward, observations);
+				
+				dryout();
 			}
 			
 			hist.apply(getCurrentObservations());
@@ -89,6 +108,8 @@ public class Main {
 			//System.out.println(hist);
 			
 			if(i%1000 == 0) System.out.println(" reward: " + hist.getTotalReward());
+			
+			fullHistory.addEntry(totalBaseReward, totalBoltReward, totalShapingReward);
 			
 			//Compute average reward over 1000 episodes
 			rewards.add(hist.getTotalReward());
@@ -104,6 +125,100 @@ public class Main {
 			}
 			
 		}
-		return avgRewards;
+		return fullHistory;
+	}
+	
+	private static void reset() {
+		env.reset();
+		agent.x = 2;
+		agent.y = 2;
+		bolt.reset();
+	}
+	
+	private static double getPotentialForState() {
+		int minDistToUnwateredTomato = 1000000000;
+		for(int x = 1; x < env.getWidth() - 1; x++) {
+			for(int y = 1; y < env.getHeight() - 1; y++) {
+				int dist = Math.abs(x - agent.x) + Math.abs(y - agent.y);
+				if(env.getTile(x, y) == Tile.UNWATERED_TOMATO && dist < minDistToUnwateredTomato) {
+					minDistToUnwateredTomato = dist;
+				}
+			}
+		}
+		return 5.0/minDistToUnwateredTomato;
+	}
+	
+	private static class RewardHistories {
+		public double[] baseRewards;
+		public double[] boltRewards;
+		public double[] shapingRewards;
+		int curIndex = 0;
+		
+		public RewardHistories(int numberOfLearningEpochs) {
+			baseRewards = new double[numberOfLearningEpochs];
+			boltRewards = new double[numberOfLearningEpochs];
+			shapingRewards = new double[numberOfLearningEpochs];
+		}
+		
+		public void addEntry(double baseReward, double boltReward, double shapingReward) {
+			baseRewards[curIndex] = baseReward;
+			boltRewards[curIndex] = boltReward;
+			shapingRewards[curIndex] = shapingReward;
+			curIndex++;
+		}
+		
+		public int getLength() {
+			return baseRewards.length;
+		}
+		
+		// averages
+		public RewardHistories downSample(int factor) {
+			int l = getLength();
+			
+			RewardHistories result;
+			
+			if(l % factor == 0) {
+				result = new RewardHistories(l / factor);
+			} else {
+				result = new RewardHistories(l / factor + 1);
+			}
+			
+			for(int i = 0; i < l / factor; i++) {
+				double totalBase = 0.0;
+				double totalBolt = 0.0;
+				double totalShaping = 0.0;
+				
+				for(int j = 0; j < factor; j++) {
+					int index = i * factor + j;
+					totalBase += baseRewards[index];
+					totalBolt += boltRewards[index];
+					totalShaping += shapingRewards[index];
+				}
+				
+				result.baseRewards[i] = totalBase;
+				result.boltRewards[i] = totalBolt;
+				result.shapingRewards[i] = totalShaping;
+			}
+			
+			if(l % factor != 0) {
+				double totalBase = 0.0;
+				double totalBolt = 0.0;
+				double totalShaping = 0.0;
+				
+				int rl = result.getLength();
+				
+				for(int j = 0; j < l % factor; j++) {
+					int index = rl * factor + j;
+					totalBase += baseRewards[index];
+					totalBolt += boltRewards[index];
+					totalShaping += shapingRewards[index];
+				}
+					
+				result.baseRewards[rl] = totalBase;
+				result.boltRewards[rl] = totalBolt;
+				result.shapingRewards[rl] = totalShaping;
+			}
+			return result;
+		}
 	}
 }
