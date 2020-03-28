@@ -9,8 +9,9 @@ public class Main {
 	static RestrainingBolt bolt;
 	static QLearner learner;
 	static final int actionCount = 100;
-	static final int learningEpochs = 10000; //100000
+	static final int learningEpochs = 1000; //100000
 	static final boolean print = false;
+	static final boolean rewardShaping = false;
 	public static List<Double> avgRewards = new ArrayList<>();
 
 	
@@ -96,7 +97,8 @@ public class Main {
 				double boltReward = bolt.applyAction(action);
 				
 				double nextPotential = getPotentialForState();
-				double shapingReward = learner.discount * nextPotential - currentPotential;
+				double shapingReward = 0;
+				if (rewardShaping) shapingReward = learner.discount * nextPotential - currentPotential;
 				currentPotential = nextPotential;
 				
 				
@@ -122,7 +124,7 @@ public class Main {
 			
 			//Compute average reward over 1000 episodes
 			rewards.add(hist.getTotalReward());
-			if ((i + 1) % 100 == 0){//1000
+			if ((i + 1) % 10 == 0){//1000
 				double s = 0;
 				for (double reward : rewards){
 					s+=reward;
