@@ -19,6 +19,8 @@ public class Main {
 	static final int downsampleFactor = 200;
 	static final boolean doDryout = true;
 	
+	static final boolean print = false;
+	
 	public static void main(String[] args) throws InterruptedException {
 		env = new Environment(6,  6, 35879879654161L);
 		agent = new Agent(env, 2, 2);
@@ -38,8 +40,6 @@ public class Main {
 		
 		XYChart chart = produceChartFor(new double[][] {rewardHistory.baseRewards, rewardHistory2.baseRewards}, new String[] {"No Shaping", "Shaping"});
 		JFrame chartFrame = new SwingWrapper<XYChart>(chart).displayChart();
-		
-		//avgRewards.plot;
 		
 		//play(learner)
 	}
@@ -124,14 +124,18 @@ public class Main {
 		for(int i = 0; i < actionCount; i++) {
 			int action = learner.getBestAction(getCurrentObservations());
 			agent.move(Move.values()[action]);
+			
 			for(RestrainingBolt bolt : bolts) {
 				bolt.applyAction(action);
 			}
 			if(doDryout) dryout();
 			System.out.println(env);
+			dryout();
+			if (print) System.out.println(env);
 			
 			Thread.sleep(500);
 		}
+		//total reward?
 	}
 	
 	private static final Random random = new Random();
@@ -163,7 +167,7 @@ public class Main {
 		RewardHistories fullHistory = new RewardHistories(episodes, bolts.size(), rewardShapers.size());
 		
 		for(int i = 0; i < episodes; i++) {
-			if(i%1000 == 0) System.out.print("Episode: " + i);
+			if(i%1000 == 0 && print) System.out.print("Episode: " + i);
 			
 			reset();
 			
@@ -209,10 +213,9 @@ public class Main {
 			
 			//System.out.println(hist);
 			
-			if(i%1000 == 0) System.out.println(" reward: " + hist.getTotalReward());
+			if(i%1000 == 0 && print) System.out.println(" reward: " + hist.getTotalReward());
 			
 			fullHistory.addEntry(totalBaseReward, totalBoltRewards, totalShapingRewards);
-			
 		}
 		return fullHistory;
 	}
