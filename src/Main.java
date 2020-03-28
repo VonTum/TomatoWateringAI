@@ -9,8 +9,10 @@ public class Main {
 	static RestrainingBolt bolt;
 	static QLearner learner;
 	static final int actionCount = 100;
-	static final int learningEpochs = 100000;
+	static final int learningEpochs = 10000; //100000
 	static final boolean print = false;
+	public static List<Double> avgRewards = new ArrayList<>();
+
 	
 	public static void main(String[] args) throws InterruptedException {
 		env = new Environment(6,  6, 35879879654161L);
@@ -26,6 +28,10 @@ public class Main {
 		
 		
 		//avgRewards.plot;
+		for (int i = 0;i<avgRewards.size();i++){
+			double v = Math.round(avgRewards.get(i) * 100.0 ) / 100.0;
+			System.out.println(v);
+		}
 		
 		//Thread.sleep(5000);
 		
@@ -41,6 +47,7 @@ public class Main {
 			Thread.sleep(500);
 
 		}
+		//total reward?
 	}
 	
 	private static final Random random = new Random();
@@ -60,9 +67,10 @@ public class Main {
 		return new int[]{agent.x - 1, agent.y - 1, env.getTomatoBitmap(), bolt.getCurrentState()};
 	}
 
+
+	
 	private static RewardHistories learn(int episodes, int steps) {
 		List<Double> rewards = new ArrayList<>();
-		List<Double> avgRewards = new ArrayList<>();
 		
 		RewardHistories fullHistory = new RewardHistories(episodes);
 		
@@ -114,7 +122,7 @@ public class Main {
 			
 			//Compute average reward over 1000 episodes
 			rewards.add(hist.getTotalReward());
-			if ((i + 1) % 1000 == 0){
+			if ((i + 1) % 100 == 0){//1000
 				double s = 0;
 				for (double reward : rewards){
 					s+=reward;
