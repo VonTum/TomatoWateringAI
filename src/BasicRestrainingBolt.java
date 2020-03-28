@@ -23,7 +23,7 @@ public class BasicRestrainingBolt implements RestrainingBolt {
 
 	@Override
 	public double applyAction(int action) {
-		return agent.x <= 3 ? 5.0 : 0.0;
+		return agent.x <= 3 ? 0.0 : -5.0;
 	}
 	
 	@Override
