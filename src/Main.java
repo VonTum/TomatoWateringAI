@@ -10,6 +10,7 @@ public class Main {
 	static QLearner learner;
 	static final int actionCount = 100;
 	static final int learningEpochs = 100000;
+	static final boolean print = false;
 	
 	public static void main(String[] args) throws InterruptedException {
 		env = new Environment(6,  6, 35879879654161L);
@@ -35,7 +36,7 @@ public class Main {
 			bolt.applyAction(action);
 
 			dryout();
-			System.out.println(env);
+			if (print) System.out.println(env);
 			
 			Thread.sleep(500);
 
@@ -66,7 +67,7 @@ public class Main {
 		RewardHistories fullHistory = new RewardHistories(episodes);
 		
 		for(int i = 0; i < episodes; i++) {
-			if(i%1000 == 0) System.out.print("Episode: " + i);
+			if(i%1000 == 0 && print) System.out.print("Episode: " + i);
 			
 			double totalBaseReward = 0.0;
 			double totalBoltReward = 0.0;
@@ -107,7 +108,7 @@ public class Main {
 			
 			//System.out.println(hist);
 			
-			if(i%1000 == 0) System.out.println(" reward: " + hist.getTotalReward());
+			if(i%1000 == 0 && print) System.out.println(" reward: " + hist.getTotalReward());
 			
 			fullHistory.addEntry(totalBaseReward, totalBoltReward, totalShapingReward);
 			
