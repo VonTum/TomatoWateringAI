@@ -1,11 +1,14 @@
+import java.util.function.Function;
 
 public class TomatoProximityShaper implements RewardShaper {
 	public Environment env;
 	public Agent agent;
+	Function<Integer, Double> potentialOverDistance;
 	
-	public TomatoProximityShaper(Environment env, Agent agent) {
+	public TomatoProximityShaper(Environment env, Agent agent, Function<Integer, Double> potentialOverDistance) {
 		this.env = env;
 		this.agent = agent;
+		this.potentialOverDistance = potentialOverDistance;
 	}
 	
 	@Override
@@ -19,6 +22,6 @@ public class TomatoProximityShaper implements RewardShaper {
 				}
 			}
 		}
-		return 5.0/minDistToUnwateredTomato;
+		return potentialOverDistance.apply(minDistToUnwateredTomato);
 	}
 }

@@ -9,9 +9,20 @@ public class Environment {
 	
 	public long seed;
 	
-	public Environment(int width, int height, long seed) {
+	public double wetRatio;
+	public double dryoutChance;
+	
+	public int ourTomatoesWidth;
+	public int neighborTomatoesWidth;
+	Random random = new Random(seed);
+	
+	public Environment(int width, int height, int ourTomatoesWidth, int neighborTomatoesWidth, long seed, double wetRatio, double dryoutChance) {
 		this.tileMap = new Tile[width][height];
 		this.seed = seed;
+		this.wetRatio = wetRatio;
+		this.dryoutChance = dryoutChance;
+		this.ourTomatoesWidth = ourTomatoesWidth;
+		this.neighborTomatoesWidth = neighborTomatoesWidth;
 		
 		for(int x = 1; x < width - 1; x++) {
 			for(int y = 1; y < height - 1; y++) {
@@ -32,16 +43,22 @@ public class Environment {
 		reset();
 	}
 	
-	private static boolean nextBool(Random random) {
-		return random.nextDouble() > 0.2;
+	public void reset() {
+		reset(this.seed);
 	}
 	
-	public void reset() {
-		Random random = new Random(seed);
-		
-		for(int x = 1; x < getWidth() - 1; x++) {
-			setTile(x, 1, nextBool(random)? Tile.UNWATERED_TOMATO : Tile.WATERED_TOMATO);
-			setTile(x, getHeight() - 2, nextBool(random)? Tile.UNWATERED_TOMATO : Tile.WATERED_TOMATO);
+	private void resetTomato(int x, int y) {
+		setTile(x, y, (random.nextDouble() > wetRatio)? Tile.UNWATERED_TOMATO : Tile.WATERED_TOMATO);
+	}
+	
+	public void reset(long seed) {
+		for(int x = 1; x < ourTomatoesWidth + 1; x++) {
+			resetTomato(x, 1);
+			resetTomato(x, getHeight() - 2);
+		}
+		for(int x = getWidth() - neighborTomatoesWidth - 1; x < getWidth() - 1; x++) {
+			resetTomato(x, 1);
+			resetTomato(x, getHeight() - 2);
 		}
 	}
 	
@@ -120,6 +137,19 @@ public class Environment {
 			return new Position(curX, curY);
 		} else {
 			return new Position(newX, newY);
+		}
+	}
+	
+	public void dryout() {
+		Random random = new Random();
+		for(int x = 1; x < getWidth() - 1; x++) {
+			for(int y = 1; y < getHeight() - 1; y++) {
+				if(getTile(x, y) == Tile.WATERED_TOMATO) {
+					if(random.nextDouble() < dryoutChance) {
+						setTile(x, y, Tile.UNWATERED_TOMATO);
+					}
+				}
+			}
 		}
 	}
 	

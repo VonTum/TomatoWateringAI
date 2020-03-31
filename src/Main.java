@@ -1,3 +1,4 @@
+import java.awt.Color;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -7,6 +8,10 @@ import javax.swing.JFrame;
 import org.knowm.xchart.QuickChart;
 import org.knowm.xchart.SwingWrapper;
 import org.knowm.xchart.XYChart;
+import org.knowm.xchart.XYChartBuilder;
+import org.knowm.xchart.XYSeries;
+import org.knowm.xchart.style.Styler.ChartTheme;
+import org.knowm.xchart.style.lines.SeriesLines;
 
 public class Main {
 	
@@ -15,34 +20,68 @@ public class Main {
 	static ArrayList<RestrainingBolt> bolts = new ArrayList<>();
 	static ArrayList<RewardShaper> rewardShapers = new ArrayList<>();
 	static final int actionCount = 100;
-	static final int learningEpochs = 100000;
-	static final int downsampleFactor = 200;
-	static final boolean doDryout = true;
+	static final int learningEpochs = 20000;
+	static final int downsampleFactor = 50;
+	static final boolean randomizeStart = false;
 	
 	static final boolean print = false;
 	
 	public static void main(String[] args) throws InterruptedException {
-		env = new Environment(6,  6, 35879879654161L);
+		env = new Environment(10, 6, 4, 2, 35879879654161L, 0.5, 0.01);
 		agent = new Agent(env, 2, 2);
-		
+		System.out.println(env);
 		
 		// learningRate, discount, exploration
-		QLearner learner = produceLearnerFor(0.3, 0.9, 0.3, bolts);
+		QLearner learner = produceLearnerFor(0.3, 0.9, 0.5, bolts);
 		RewardHistories rewardHistory = learn(learner, learningEpochs, actionCount);
 		
-		rewardShapers.add(new TomatoProximityShaper(env, agent));
+		rewardShapers.add(new TomatoProximityShaper(env, agent, (dist) -> {return 5.0 / dist;}));
 		//bolts.add(new BasicRestrainingBolt(env, agent));
 		
 		//rewardShapers.add(new RandomRewardShaper());
 		
-		QLearner learner2 = produceLearnerFor(0.3, 0.9, 0.3, bolts);
+		QLearner learner2 = produceLearnerFor(0.3, 0.9, 0.5, bolts);
 		RewardHistories rewardHistory2 = learn(learner2, learningEpochs, actionCount);
 		
-		XYChart chart = produceChartFor(new double[][] {rewardHistory.baseRewards, rewardHistory2.baseRewards}, new String[] {"No Shaping", "Shaping"});
-		JFrame chartFrame = new SwingWrapper<XYChart>(chart).displayChart();
+		rewardShapers.remove(0);
+		rewardShapers.add(new TomatoProximityShaper(env, agent, (dist) -> {return 10.0*Math.pow(2, -dist);}));
+
+		QLearner learner3 = produceLearnerFor(0.3, 0.9, 0.5, bolts);
+		RewardHistories rewardHistory3 = learn(learner3, learningEpochs, actionCount);
 		
-		//play(learner)
+		double[] indices = new double[(learningEpochs + downsampleFactor - 1) / downsampleFactor];
+		for(int i = 0; i < indices.length; i++) {indices[i] = i * downsampleFactor;}
+		
+		XYChart chart = new XYChartBuilder()
+				.title("Base reward")
+				.xAxisTitle("episodes")
+				.yAxisTitle("average reward")
+				.theme(ChartTheme.Matlab).build();
+		
+		chart.addSeries("Base reward", indices, downsample(rewardHistory.baseRewards, downsampleFactor));
+		
+		XYSeries series2 = chart.addSeries("Shaped with 5.0/dist", indices, downsample(rewardHistory2.baseRewards, downsampleFactor));
+		series2.setLineStyle(SeriesLines.DASH_DASH);
+		series2.setLineColor(Color.ORANGE);
+		series2.setFillColor(Color.ORANGE);
+		series2.setMarkerColor(Color.ORANGE);
+		
+		XYSeries series3 = chart.addSeries("Shaped with 10.0 * 2^-dist", indices, downsample(rewardHistory3.baseRewards, downsampleFactor));
+		series3.setLineStyle(SeriesLines.DOT_DOT);
+		series3.setLineColor(Color.GREEN.brighter());
+		series3.setFillColor(Color.GREEN.brighter());
+		series3.setMarkerColor(Color.GREEN.brighter());
+		
+		new SwingWrapper<XYChart>(chart).displayChart();
+		
+		//BubbleChart bubbleChart = new BubbleChart(200, 200, ChartTheme.Matlab);
+		
+		play(learner);
 	}
+	
+	/*private static double computeAverageRewardOfLearner(QLearner learner, int epochs, int actionCount) {
+		
+	}*/
 	
 	private static QLearner produceLearnerFor(double learningRate, double discount, double exploration, List<RestrainingBolt> bolts) {
 		int[] observationSizes = new int[bolts.size() + 3];
@@ -57,18 +96,6 @@ public class Main {
 		return new QLearner(4, learningRate, discount, exploration, observationSizes);
 	}
 	
-	public static XYChart produceChartFor(double[][] histories, String[] labels) {
-		double[] h0 = downsample(histories[0], downsampleFactor);
-		double[] indices = new double[h0.length];
-		for(int i = 0; i < indices.length; i++) {
-			indices[i] = i * downsampleFactor;
-		}
-		XYChart chart = QuickChart.getChart("testChart", "episodes", "average reward", labels[0], indices, h0);
-		for(int i = 1; i < histories.length; i++) {
-			chart.addSeries(labels[i], indices, downsample(histories[i], downsampleFactor));
-		}
-		return chart;
-	}
 	
 	private static double[] downsample(double[] data, int factor) {
 		double[] result;
@@ -128,9 +155,8 @@ public class Main {
 			for(RestrainingBolt bolt : bolts) {
 				bolt.applyAction(action);
 			}
-			if(doDryout) dryout();
 			System.out.println(env);
-			dryout();
+			env.dryout();
 			if (print) System.out.println(env);
 			
 			Thread.sleep(500);
@@ -138,18 +164,7 @@ public class Main {
 		//total reward?
 	}
 	
-	private static final Random random = new Random();
-	private static void dryout() {
-		for(int x = 1; x < env.getWidth() - 1; x++) {
-			for(int y = 1; y < env.getHeight() - 1; y++) {
-				if(env.getTile(x, y) == Tile.WATERED_TOMATO) {
-					if(random.nextDouble() < 0.1) {
-						env.setTile(x, y, Tile.UNWATERED_TOMATO);
-					}
-				}
-			}
-		}
-	}
+	
 	
 	static int[] getCurrentObservations() {
 		int[] observations = new int[bolts.size() + 3];
@@ -163,59 +178,86 @@ public class Main {
 		return observations;
 	}
 
+	private static RewardBreakdown computeAndApplyAction(QLearner learner, double[] currentPotentials) {
+		int[] observations = getCurrentObservations();
+		int action = learner.getNextAction(observations);
+		
+		boolean wateredPlant = agent.move(Move.values()[action]);
+
+		double baseReward = (wateredPlant? 10.0 : -0.5);
+		
+		double[] boltRewards = new double[bolts.size()];
+		for(int i = 0; i < boltRewards.length; i++) {
+			boltRewards[i] = bolts.get(i).applyAction(action);
+		}
+		double[] shapingRewards = new double[rewardShapers.size()];
+		double[] nextPotentials = getPotentialsForState();
+		for(int i = 0; i < shapingRewards.length; i++) {
+			shapingRewards[i] = learner.discount * nextPotentials[i] - currentPotentials[i];
+			currentPotentials[i] = nextPotentials[i];
+		}
+		
+		env.dryout();
+		
+		return new RewardBreakdown(observations, action, baseReward, boltRewards, shapingRewards);
+	}
+	
+	static private class HistoryWithRewardBreakdown{
+		public double totalBaseReward;
+		public double[] totalBoltRewards;
+		public double[] totalShapingRewards;
+		public QLearner.History hist;
+		
+		public HistoryWithRewardBreakdown(double totalBaseReward, double[] totalBoltRewards, double[] totalShapingRewards, QLearner.History hist) {
+			super();
+			this.totalBaseReward = totalBaseReward;
+			this.totalBoltRewards = totalBoltRewards;
+			this.totalShapingRewards = totalShapingRewards;
+			this.hist = hist;
+		}
+	}
+	
+	private static HistoryWithRewardBreakdown performSteps(QLearner learner, int steps) {
+		double totalBaseReward = 0.0;
+		double[] totalBoltRewards = new double[bolts.size()];
+		double[] totalShapingRewards = new double[rewardShapers.size()];
+		
+		QLearner.History hist = learner.new History();
+		double[] currentPotentials = getPotentialsForState();
+		for(int step = 0; step < steps; step++) {
+			
+			RewardBreakdown breakdown = computeAndApplyAction(learner, currentPotentials);
+			
+			hist.visit(breakdown.action, breakdown.getTotalReward(), breakdown.observations);
+			
+			totalBaseReward += breakdown.baseReward;
+			addInto(totalBoltRewards, breakdown.boltRewards);
+			addInto(totalShapingRewards, breakdown.shapingRewards);
+			
+			env.dryout();
+		}
+		
+		hist.apply(getCurrentObservations());
+		return new HistoryWithRewardBreakdown(totalBaseReward, totalBoltRewards, totalShapingRewards, hist);
+	}
+	
 	private static RewardHistories learn(QLearner learner, int episodes, int steps) {
 		RewardHistories fullHistory = new RewardHistories(episodes, bolts.size(), rewardShapers.size());
+		
+		
 		
 		for(int i = 0; i < episodes; i++) {
 			if(i%1000 == 0 && print) System.out.print("Episode: " + i);
 			
 			reset();
 			
-			
-			double totalBaseReward = 0.0;
-			double[] totalBoltRewards = new double[bolts.size()];
-			double[] totalShapingRewards = new double[rewardShapers.size()];
-			
-			QLearner.History hist = learner.new History();
-			double[] currentPotentials = getPotentialsForState();
-			for(int step = 0; step < steps; step++) {
-				int[] observations = getCurrentObservations();
-				int action = learner.getNextAction(observations);
-				
-				boolean wateredPlant = agent.move(Move.values()[action]);
-
-				double baseReward = (wateredPlant? 10.0 : -0.5);
-				totalBaseReward += baseReward;
-				
-				double reward = baseReward;
-				
-				for(int bi = 0; bi < bolts.size(); bi++) {
-					double boltReward = bolts.get(bi).applyAction(action);
-					totalBoltRewards[bi] += boltReward;
-					reward += boltReward;
-				}
-				
-				double[] nextPotentials = getPotentialsForState();
-				
-				for(int si = 0; si < rewardShapers.size(); si++) {
-					double shapingReward = learner.discount * nextPotentials[si] - currentPotentials[si];
-					totalShapingRewards[si] = shapingReward;
-					reward += shapingReward;
-				}
-				currentPotentials = nextPotentials;
-				
-				hist.visit(action, reward, observations);
-				
-				if(doDryout) dryout();
-			}
-			
-			hist.apply(getCurrentObservations());
+			HistoryWithRewardBreakdown hist = performSteps(learner, steps);
 			
 			//System.out.println(hist);
 			
-			if(i%1000 == 0 && print) System.out.println(" reward: " + hist.getTotalReward());
+			if(i%1000 == 0 && print) System.out.println(" reward: " + hist.hist.getTotalReward());
 			
-			fullHistory.addEntry(totalBaseReward, totalBoltRewards, totalShapingRewards);
+			fullHistory.addEntry(hist.totalBaseReward, hist.totalBoltRewards, hist.totalShapingRewards);
 		}
 		return fullHistory;
 	}
@@ -229,9 +271,16 @@ public class Main {
 	}
 	
 	private static void reset() {
-		env.reset();
-		agent.x = 2;
-		agent.y = 2;
+		if(randomizeStart) {
+			Random random = new Random();
+			env.reset(random.nextLong());
+			agent.x = 1 + random.nextInt(env.getWidth() - 2);
+			agent.y = 1 + random.nextInt(env.getHeight() - 2);
+		}else {
+			env.reset();
+			agent.x = 2;
+			agent.y = 2;
+		}
 		for(RestrainingBolt bolt : bolts) {
 			bolt.reset();
 		}
@@ -270,6 +319,16 @@ public class Main {
 			return baseRewards.length;
 		}
 		
+		public double[] getTotalUnshapedReward() {
+			double[] totalBoltReward = getTotalBoltReward();
+			double[] result = new double[getLength()];
+			
+			for(int i = 0; i < result.length; i++) {
+				result[i] = totalBoltReward[i] + baseRewards[i];
+			}
+			return result;
+		}
+		
 		public double[] getTotalBoltReward() {
 			double[] result = new double[getLength()];
 			
@@ -303,6 +362,51 @@ public class Main {
 					downsample(this.boltRewards, factor), 
 					downsample(this.shapingRewards, factor)
 			);
+		}
+	}
+	
+	static void addInto(double[] first, double[] second) {
+		for(int i = 0; i < first.length; i++) {
+			first[i] += second[i];
+		}
+	}
+	
+	static double sum(double[] arr) {
+		double total = 0.0;
+		for(int i = 0; i < arr.length; i++) {
+			total += arr[i];
+		}
+		return total;
+	}
+	
+	public static class RewardBreakdown {
+		public int[] observations;
+		public int action;
+		public double baseReward;
+		public double[] boltRewards;
+		public double[] shapingRewards;
+		
+		
+		public RewardBreakdown(int[] observations, int action, double baseReward, double[] boltRewards, double[] shapingRewards) {
+			this.observations = observations;
+			this.action = action;
+			this.baseReward = baseReward;
+			this.boltRewards = boltRewards;
+			this.shapingRewards = shapingRewards;
+		}
+		
+		public double getTotalNonShapingReward() {
+			return baseReward + sum(boltRewards);
+		}
+		
+		public double getTotalReward() {
+			return baseReward + sum(boltRewards) + sum(shapingRewards);
+		}
+		
+		public void add(RewardBreakdown other) {
+			this.baseReward += other.baseReward;
+			addInto(this.boltRewards, other.boltRewards);
+			addInto(this.shapingRewards, other.shapingRewards);
 		}
 	}
 }
