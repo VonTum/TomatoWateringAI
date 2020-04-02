@@ -41,7 +41,7 @@ public class AdvancedRestrainingBolt implements RestrainingBolt{
 		boolean b = true;
 		for (int i = 0; i <= 3; i++){
 			for (int j = 0; j <= this.env.getHeight(); j++){
-				if (this.env.getTile(this.agent.x, this.agent.y) == Tile.UNWATERED_TOMATO) b = false;
+				if (this.env.getTile(i, j) == Tile.UNWATERED_TOMATO) b = false;
 			}		
 		}
 		this.setState(b ? 1 : 0);

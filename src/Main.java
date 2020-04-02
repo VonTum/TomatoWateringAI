@@ -37,7 +37,8 @@ public class Main {
 		
 		rewardShapers.add(new TomatoProximityShaper(env, agent, (dist) -> {return 5.0 / dist;}));
 		//bolts.add(new BasicRestrainingBolt(env, agent));
-		
+		bolts.add(new AdvancedRestrainingBolt(env, agent));
+
 		//rewardShapers.add(new RandomRewardShaper());
 		
 		QLearner learner2 = produceLearnerFor(0.3, 0.9, 0.5, bolts);

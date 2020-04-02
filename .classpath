@@ -7,7 +7,5 @@
 			<attribute name="javadoc_location" value="https://knowm.org/javadocs/xchart/"/>
 		</attributes>
 	</classpathentry>
-	<classpathentry kind="lib" path="C:/Users/Tibo/Downloads/xchart-3.6.2.zip"/>
-	<classpathentry kind="lib" path="C:/Users/Tibo/GitHub/TomatoWateringAI/xchart-3.6.2.zip"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
