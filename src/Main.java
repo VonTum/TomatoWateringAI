@@ -12,6 +12,7 @@ import org.knowm.xchart.XYChartBuilder;
 import org.knowm.xchart.XYSeries;
 import org.knowm.xchart.style.Styler.ChartTheme;
 import org.knowm.xchart.style.lines.SeriesLines;
+import org.knowm.xchart.style.markers.SeriesMarkers;
 
 public class Main {
 	
@@ -20,7 +21,7 @@ public class Main {
 	static ArrayList<RestrainingBolt> bolts = new ArrayList<>();
 	static ArrayList<RewardShaper> rewardShapers = new ArrayList<>();
 	static final int actionCount = 100;
-	static final int learningEpochs = 20000;
+	static final int learningEpochs = 200000;
 	static final int downsampleFactor = 50;
 	static final boolean randomizeStart = false;
 	
@@ -33,8 +34,17 @@ public class Main {
 		
 		// learningRate, discount, exploration
 		QLearner learner = produceLearnerFor(0.3, 0.9, 0.5, bolts);
+		{
+			HistoryWithRewardBreakdown breakdown = performSteps(learner, 100);
+			XYChart moveChart = produceMovementChart(breakdown.movementHistory);
+			new SwingWrapper<XYChart>(moveChart).displayChart();
+		}
 		RewardHistories rewardHistory = learn(learner, learningEpochs, actionCount);
-		
+		{
+			HistoryWithRewardBreakdown breakdown = performSteps(learner, 100);
+			XYChart moveChart = produceMovementChart(breakdown.movementHistory);
+			new SwingWrapper<XYChart>(moveChart).displayChart();
+		}
 		rewardShapers.add(new TomatoProximityShaper(env, agent, (dist) -> {return 5.0 / dist;}));
 		//bolts.add(new BasicRestrainingBolt(env, agent));
 		bolts.add(new AdvancedRestrainingBolt(env, agent));
@@ -73,16 +83,59 @@ public class Main {
 		series3.setFillColor(Color.GREEN.brighter());
 		series3.setMarkerColor(Color.GREEN.brighter());
 		
-		new SwingWrapper<XYChart>(chart).displayChart();
+		//new SwingWrapper<XYChart>(chart).displayChart();
 		
 		//BubbleChart bubbleChart = new BubbleChart(200, 200, ChartTheme.Matlab);
 		
-		play(learner);
+		//play(learner);
 	}
 	
 	/*private static double computeAverageRewardOfLearner(QLearner learner, int epochs, int actionCount) {
 		
 	}*/
+	
+	private static XYChart produceMovementChart(MovementHistory h) {
+		int l = h.xPositions.length;
+		
+		
+		double[] xChartValues = new double[l];
+		double[] yChartValues = new double[l];
+		double[] xWateredPositions = new double[h.getWateredCount()];
+		double[] yWateredPositions = new double[h.getWateredCount()];
+		int curWateredPosition = 0;
+		for(int i = 0; i < l; i++) {
+			double progress = ((double) i) / l;
+			double xPos = h.xPositions[i] + 0.05 + 0.90 * progress;
+			double yPos = h.yPositions[i] + 0.95 - 0.90 * progress;
+			xChartValues[i] = xPos;
+			yChartValues[i] = yPos;
+			
+			if(h.wateredActions[i]) {
+				xWateredPositions[curWateredPosition] = xPos;
+				yWateredPositions[curWateredPosition] = yPos;
+				curWateredPosition++;
+			}
+		}
+		
+		XYChart chart = new XYChartBuilder()
+				.title("")
+				.xAxisTitle("x position")
+				.yAxisTitle("y position")
+				.theme(ChartTheme.Matlab).build();
+		
+		XYSeries movementSeries = chart.addSeries("Movement", xChartValues, yChartValues);
+		movementSeries.setMarker(SeriesMarkers.NONE);
+		XYSeries waterSeries = chart.addSeries("Watering", xWateredPositions, yWateredPositions);
+		
+		waterSeries.setLineStyle(SeriesLines.NONE);
+		waterSeries.setMarker(SeriesMarkers.TRIANGLE_UP);
+		waterSeries.setMarkerColor(Color.RED);
+		
+		chart.getStyler().setXAxisMin(0.0).setXAxisMax(env.getWidth() + 0.0);
+		chart.getStyler().setYAxisMin(0.0).setYAxisMax(env.getHeight() + 0.0);
+		
+		return chart;
+	}
 	
 	private static QLearner produceLearnerFor(double learningRate, double discount, double exploration, List<RestrainingBolt> bolts) {
 		int[] observationSizes = new int[bolts.size() + 3];
@@ -200,7 +253,7 @@ public class Main {
 		
 		env.dryout();
 		
-		return new RewardBreakdown(observations, action, baseReward, boltRewards, shapingRewards);
+		return new RewardBreakdown(observations, action, baseReward, boltRewards, shapingRewards, wateredPlant);
 	}
 	
 	static private class HistoryWithRewardBreakdown{
@@ -208,13 +261,15 @@ public class Main {
 		public double[] totalBoltRewards;
 		public double[] totalShapingRewards;
 		public QLearner.History hist;
+		MovementHistory movementHistory;
 		
-		public HistoryWithRewardBreakdown(double totalBaseReward, double[] totalBoltRewards, double[] totalShapingRewards, QLearner.History hist) {
+		public HistoryWithRewardBreakdown(double totalBaseReward, double[] totalBoltRewards, double[] totalShapingRewards, QLearner.History hist, MovementHistory movementHistory) {
 			super();
 			this.totalBaseReward = totalBaseReward;
 			this.totalBoltRewards = totalBoltRewards;
 			this.totalShapingRewards = totalShapingRewards;
 			this.hist = hist;
+			this.movementHistory = movementHistory;
 		}
 	}
 	
@@ -224,12 +279,14 @@ public class Main {
 		double[] totalShapingRewards = new double[rewardShapers.size()];
 		
 		QLearner.History hist = learner.new History();
+		MovementHistory movementHist = new MovementHistory(steps, agent.x, agent.y);
 		double[] currentPotentials = getPotentialsForState();
 		for(int step = 0; step < steps; step++) {
 			
 			RewardBreakdown breakdown = computeAndApplyAction(learner, currentPotentials);
 			
 			hist.visit(breakdown.action, breakdown.getTotalReward(), breakdown.observations);
+			movementHist.visit(agent.x, agent.y, breakdown.wateredPlant);
 			
 			totalBaseReward += breakdown.baseReward;
 			addInto(totalBoltRewards, breakdown.boltRewards);
@@ -238,14 +295,11 @@ public class Main {
 			env.dryout();
 		}
 		
-		hist.apply(getCurrentObservations());
-		return new HistoryWithRewardBreakdown(totalBaseReward, totalBoltRewards, totalShapingRewards, hist);
+		return new HistoryWithRewardBreakdown(totalBaseReward, totalBoltRewards, totalShapingRewards, hist, movementHist);
 	}
 	
 	private static RewardHistories learn(QLearner learner, int episodes, int steps) {
 		RewardHistories fullHistory = new RewardHistories(episodes, bolts.size(), rewardShapers.size());
-		
-		
 		
 		for(int i = 0; i < episodes; i++) {
 			if(i%1000 == 0 && print) System.out.print("Episode: " + i);
@@ -254,10 +308,9 @@ public class Main {
 			
 			HistoryWithRewardBreakdown hist = performSteps(learner, steps);
 			
-			//System.out.println(hist);
-			
 			if(i%1000 == 0 && print) System.out.println(" reward: " + hist.hist.getTotalReward());
-			
+
+			hist.hist.apply(getCurrentObservations());
 			fullHistory.addEntry(hist.totalBaseReward, hist.totalBoltRewards, hist.totalShapingRewards);
 		}
 		return fullHistory;
@@ -386,14 +439,16 @@ public class Main {
 		public double baseReward;
 		public double[] boltRewards;
 		public double[] shapingRewards;
+		public boolean wateredPlant;
 		
 		
-		public RewardBreakdown(int[] observations, int action, double baseReward, double[] boltRewards, double[] shapingRewards) {
+		public RewardBreakdown(int[] observations, int action, double baseReward, double[] boltRewards, double[] shapingRewards, boolean wateredPlant) {
 			this.observations = observations;
 			this.action = action;
 			this.baseReward = baseReward;
 			this.boltRewards = boltRewards;
 			this.shapingRewards = shapingRewards;
+			this.wateredPlant = wateredPlant;
 		}
 		
 		public double getTotalNonShapingReward() {
@@ -408,6 +463,39 @@ public class Main {
 			this.baseReward += other.baseReward;
 			addInto(this.boltRewards, other.boltRewards);
 			addInto(this.shapingRewards, other.shapingRewards);
+		}
+	}
+	
+	public static class MovementHistory{
+		int[] xPositions;
+		int[] yPositions;
+		boolean[] wateredActions;
+		
+		int curIndex = 1;
+		
+		public MovementHistory(int stepCount, int startX, int startY) {
+			this.xPositions = new int[stepCount+1];
+			this.yPositions = new int[stepCount+1];
+			this.wateredActions = new boolean[stepCount+1];
+			
+			xPositions[0] = startX;
+			yPositions[0] = startY;
+			wateredActions[0] = false;
+		}
+		
+		void visit(int x, int y, boolean watered) {
+			xPositions[curIndex] = x;
+			yPositions[curIndex] = y;
+			wateredActions[curIndex] = watered;
+			curIndex++;
+		}
+		
+		int getWateredCount() {
+			int total = 0;
+			for(int i = 0; i < wateredActions.length; i++) {
+				if(wateredActions[i]) total++;
+			}
+			return total;
 		}
 	}
 }
