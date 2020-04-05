@@ -49,6 +49,36 @@ public class QLearner {
 		setQFor(action, newQ, observationsListToID(observations));
 	}
 	
+	public QLearner addObservable(int newObservableStateCount) {
+		int[] newObservableSizes = new int[observationSizes.length + 1];
+		for(int i = 0; i < observationSizes.length; i++) {
+			newObservableSizes[i] = observationSizes[i];
+		}
+		newObservableSizes[newObservableSizes.length - 1] = newObservableStateCount;
+		
+		QLearner result = new QLearner(this.getNumberOfActions(), this.learningRate, this.discount, this.exploration, newObservableSizes);
+		
+		int ourNumberOfObs = getNumberOfObservations();
+		for(int action = 0; action < getNumberOfActions(); action++) {
+			for(int obs = 0; obs < ourNumberOfObs; obs++) {
+				int[] baseObservations = this.observationIDToList(obs);
+				int[] expandedObservations = new int[baseObservations.length + 1];
+				for(int i = 0; i < baseObservations.length; i++) {
+					expandedObservations[i] = baseObservations[i];
+				}
+				
+				double qToSet = this.getQFor(action, obs);
+				for(int extraObs = 0; extraObs < newObservableStateCount; extraObs++) {
+					expandedObservations[expandedObservations.length - 1] = extraObs;
+					
+					result.setQFor(action, qToSet, expandedObservations);
+				}
+			}
+		}
+		
+		return result;
+	}
+	
 	public int getNumberOfActions() {
 		return qValues[0].length;
 	}

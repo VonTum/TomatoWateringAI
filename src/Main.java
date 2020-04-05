@@ -21,16 +21,46 @@ public class Main {
 	static ArrayList<RestrainingBolt> bolts = new ArrayList<>();
 	static ArrayList<RewardShaper> rewardShapers = new ArrayList<>();
 	static final int actionCount = 100;
-	static final int learningEpochs = 200000;
-	static final int downsampleFactor = 50;
+	static final int learningEpochs = 100000;
+	static final int downsampleFactor = 500;
 	static final boolean randomizeStart = false;
 	
 	static final boolean print = false;
 	
 	public static void main(String[] args) throws InterruptedException {
-		env = new Environment(10, 6, 4, 2, 35879879654161L, 0.5, 0.01);
+		env = new Environment(10, 6, 3, 3, 35879879654161L, 0.3, 0.01);
 		agent = new Agent(env, 2, 2);
 		System.out.println(env);
+
+		double[] indices = new double[(learningEpochs + downsampleFactor - 1) / downsampleFactor];
+		for(int i = 0; i < indices.length; i++) {indices[i] = i * downsampleFactor;}
+		
+		double[] halfIndices = new double[(learningEpochs + downsampleFactor - 1) / downsampleFactor / 2];
+		for(int i = 0; i < halfIndices.length; i++) {halfIndices[i] = i * downsampleFactor;}
+		
+		
+		bolts.add(new AdvancedRestrainingBolt(env, agent));
+		{
+			QLearner learner = produceLearnerFor(0.3, 0.9, 0.3, bolts);
+			{
+				HistoryWithRewardBreakdown breakdown = performSteps(learner, 100);
+				XYChart moveChart = produceMovementChart(breakdown.movementHistory);
+				new SwingWrapper<XYChart>(moveChart).displayChart();
+			}
+			RewardHistories rewardHistory = learn(learner, learningEpochs, actionCount);
+			
+			rewardHistory.boltRewards = new double[1][rewardHistory.getLength()];
+			
+			{
+				HistoryWithRewardBreakdown breakdown = performSteps(learner, 100);
+				XYChart moveChart = produceMovementChart(breakdown.movementHistory);
+				new SwingWrapper<XYChart>(moveChart).displayChart();
+			}
+		}
+		
+		
+		if(true) return;
+		
 		
 		// learningRate, discount, exploration
 		QLearner learner = produceLearnerFor(0.3, 0.9, 0.5, bolts);
@@ -39,31 +69,104 @@ public class Main {
 			XYChart moveChart = produceMovementChart(breakdown.movementHistory);
 			new SwingWrapper<XYChart>(moveChart).displayChart();
 		}
-		RewardHistories rewardHistory = learn(learner, learningEpochs, actionCount);
+		RewardHistories rewardHistory = learn(learner, learningEpochs / 2, actionCount);
+		
+		rewardHistory.boltRewards = new double[1][rewardHistory.getLength()];
+		
 		{
 			HistoryWithRewardBreakdown breakdown = performSteps(learner, 100);
 			XYChart moveChart = produceMovementChart(breakdown.movementHistory);
 			new SwingWrapper<XYChart>(moveChart).displayChart();
 		}
-		rewardShapers.add(new TomatoProximityShaper(env, agent, (dist) -> {return 5.0 / dist;}));
+		//rewardShapers.add(new TomatoProximityShaper(env, agent, (dist) -> {return 5.0 / dist;}));
 		//bolts.add(new BasicRestrainingBolt(env, agent));
 		bolts.add(new AdvancedRestrainingBolt(env, agent));
+		
+		QLearner learnerWithBolt = learner.addObservable(bolts.get(0).getNumberOfStates());
+		
+		RewardHistories rewardHistoryAfterBolt = learn(learnerWithBolt, learningEpochs / 2, actionCount);
+		
+		RewardHistories combinedHistory = RewardHistories.join(rewardHistory, rewardHistoryAfterBolt);
+		
+		{
+			XYChart boltRewardChart = new XYChartBuilder()
+					.title("")
+					.xAxisTitle("episodes")
+					.yAxisTitle("average reward")
+					.theme(ChartTheme.Matlab).build();
+			
+			boltRewardChart.addSeries("Total reward without RB", indices, downsample(combinedHistory.baseRewards, downsampleFactor));
+			
+			XYSeries series2 = boltRewardChart.addSeries("Total rewards with RB", indices, downsample(combinedHistory.getTotalUnshapedReward(), downsampleFactor));
+			series2.setLineStyle(SeriesLines.DASH_DASH);
+			series2.setLineColor(Color.ORANGE);
+			series2.setFillColor(Color.ORANGE);
+			series2.setMarkerColor(Color.ORANGE);
+			
+			XYSeries series3 = boltRewardChart.addSeries("Bolt punishments", indices, downsample(combinedHistory.boltRewards[0], downsampleFactor));
+			series3.setLineStyle(SeriesLines.DOT_DOT);
+			series3.setLineColor(Color.GREEN.brighter());
+			series3.setFillColor(Color.GREEN.brighter());
+			series3.setMarkerColor(Color.GREEN.brighter());
+			
+			new SwingWrapper<XYChart>(boltRewardChart).displayChart();
+		}
 
 		//rewardShapers.add(new RandomRewardShaper());
 		
 		QLearner learner2 = produceLearnerFor(0.3, 0.9, 0.5, bolts);
-		RewardHistories rewardHistory2 = learn(learner2, learningEpochs, actionCount);
+		RewardHistories rewardHistory2 = learn(learner2, learningEpochs / 2, actionCount);
 		
-		rewardShapers.remove(0);
-		rewardShapers.add(new TomatoProximityShaper(env, agent, (dist) -> {return 10.0*Math.pow(2, -dist);}));
+		{
+			XYChart boltRewardComparisonChart = new XYChartBuilder()
+					.title("")
+					.xAxisTitle("episodes")
+					.yAxisTitle("average reward")
+					.theme(ChartTheme.Matlab).build();
+			
+			boltRewardComparisonChart.addSeries("Total reward of pretrained agent", halfIndices, downsample(rewardHistoryAfterBolt.getTotalUnshapedReward(), downsampleFactor));
+			
+			XYSeries series2 = boltRewardComparisonChart.addSeries("Total reward of agent starting from zero", halfIndices, downsample(rewardHistory2.getTotalUnshapedReward(), downsampleFactor));
+			series2.setLineStyle(SeriesLines.DASH_DASH);
+			series2.setLineColor(Color.ORANGE);
+			series2.setFillColor(Color.ORANGE);
+			series2.setMarkerColor(Color.ORANGE);
+			
+			new SwingWrapper<XYChart>(boltRewardComparisonChart).displayChart();
+		}
+		
+		{
+			XYChart boltRewardComparisonChart = new XYChartBuilder()
+					.title("")
+					.xAxisTitle("episodes")
+					.yAxisTitle("average reward")
+					.theme(ChartTheme.Matlab).build();
+			
+			boltRewardComparisonChart.addSeries("Punishment from the restraining bolt of pretrained agent", halfIndices, downsample(rewardHistoryAfterBolt.getTotalBoltReward(), downsampleFactor));
+			
+			XYSeries series2 = boltRewardComparisonChart.addSeries("Punishment from the restraining bolt of agent starting from zero", halfIndices, downsample(rewardHistory2.getTotalBoltReward(), downsampleFactor));
+			series2.setLineStyle(SeriesLines.DASH_DASH);
+			series2.setLineColor(Color.ORANGE);
+			series2.setFillColor(Color.ORANGE);
+			series2.setMarkerColor(Color.ORANGE);
+			
+			new SwingWrapper<XYChart>(boltRewardComparisonChart).displayChart();
+		}
+		
+		{
+			HistoryWithRewardBreakdown breakdown = performSteps(learner2, 100);
+			XYChart moveChart = produceMovementChart(breakdown.movementHistory);
+			new SwingWrapper<XYChart>(moveChart).displayChart();
+		}
+		
+		//rewardShapers.remove(0);
+		//rewardShapers.add(new TomatoProximityShaper(env, agent, (dist) -> {return 10.0*Math.pow(2, -dist);}));
 
 		QLearner learner3 = produceLearnerFor(0.3, 0.9, 0.5, bolts);
 		RewardHistories rewardHistory3 = learn(learner3, learningEpochs, actionCount);
 		
-		double[] indices = new double[(learningEpochs + downsampleFactor - 1) / downsampleFactor];
-		for(int i = 0; i < indices.length; i++) {indices[i] = i * downsampleFactor;}
 		
-		XYChart chart = new XYChartBuilder()
+		/*XYChart chart = new XYChartBuilder()
 				.title("Base reward")
 				.xAxisTitle("episodes")
 				.yAxisTitle("average reward")
@@ -81,8 +184,31 @@ public class Main {
 		series3.setLineStyle(SeriesLines.DOT_DOT);
 		series3.setLineColor(Color.GREEN.brighter());
 		series3.setFillColor(Color.GREEN.brighter());
-		series3.setMarkerColor(Color.GREEN.brighter());
+		series3.setMarkerColor(Color.GREEN.brighter());*/
 		
+		{
+			XYChart boltRewardChart = new XYChartBuilder()
+					.title("Base reward")
+					.xAxisTitle("episodes")
+					.yAxisTitle("average reward")
+					.theme(ChartTheme.Matlab).build();
+			
+			boltRewardChart.addSeries("Total reward without RB", halfIndices, downsample(rewardHistory.baseRewards, downsampleFactor));
+			
+			XYSeries series2 = boltRewardChart.addSeries("Total rewards with RB", indices, downsample(rewardHistory2.getTotalUnshapedReward(), downsampleFactor));
+			series2.setLineStyle(SeriesLines.DASH_DASH);
+			series2.setLineColor(Color.ORANGE);
+			series2.setFillColor(Color.ORANGE);
+			series2.setMarkerColor(Color.ORANGE);
+			
+			XYSeries series3 = boltRewardChart.addSeries("Bolt punishments", indices, downsample(rewardHistory3.boltRewards[0], downsampleFactor));
+			series3.setLineStyle(SeriesLines.DOT_DOT);
+			series3.setLineColor(Color.GREEN.brighter());
+			series3.setFillColor(Color.GREEN.brighter());
+			series3.setMarkerColor(Color.GREEN.brighter());
+			
+			new SwingWrapper<XYChart>(boltRewardChart).displayChart();
+		}
 		//new SwingWrapper<XYChart>(chart).displayChart();
 		
 		//BubbleChart bubbleChart = new BubbleChart(200, 200, ChartTheme.Matlab);
@@ -96,7 +222,6 @@ public class Main {
 	
 	private static XYChart produceMovementChart(MovementHistory h) {
 		int l = h.xPositions.length;
-		
 		
 		double[] xChartValues = new double[l];
 		double[] yChartValues = new double[l];
@@ -117,14 +242,25 @@ public class Main {
 			}
 		}
 		
+		double[] xChartBeforeBolt = getBeforeIndex(xChartValues, h.stepAtWhichBoltSwitches);
+		double[] xChartAfterBolt = getAfterIndex(xChartValues, h.stepAtWhichBoltSwitches);
+		double[] yChartBeforeBolt = getBeforeIndex(yChartValues, h.stepAtWhichBoltSwitches);
+		double[] yChartAfterBolt = getAfterIndex(yChartValues, h.stepAtWhichBoltSwitches);
+		
 		XYChart chart = new XYChartBuilder()
 				.title("")
 				.xAxisTitle("x position")
 				.yAxisTitle("y position")
 				.theme(ChartTheme.Matlab).build();
 		
-		XYSeries movementSeries = chart.addSeries("Movement", xChartValues, yChartValues);
-		movementSeries.setMarker(SeriesMarkers.NONE);
+		if(h.stepAtWhichBoltSwitches != 0) {
+			XYSeries movementSeries = chart.addSeries("Movement before bolt switch", xChartBeforeBolt, yChartBeforeBolt);
+			movementSeries.setMarker(SeriesMarkers.NONE);
+		}
+		if(h.stepAtWhichBoltSwitches != l) {
+			XYSeries movementSeries2 = chart.addSeries("Movement after bolt switch", xChartAfterBolt, yChartAfterBolt);
+			movementSeries2.setMarker(SeriesMarkers.NONE);
+		}
 		XYSeries waterSeries = chart.addSeries("Watering", xWateredPositions, yWateredPositions);
 		
 		waterSeries.setLineStyle(SeriesLines.NONE);
@@ -198,6 +334,26 @@ public class Main {
 		}
 		
 		return results;
+	}
+	
+	private static double[] getBeforeIndex(double[] data, int indexToSplitAt) {
+		double[] resultLeft = new double[indexToSplitAt];
+		
+		for(int i = 0; i < indexToSplitAt; i++) {
+			resultLeft[i] = data[i];
+		}
+		
+		return resultLeft;
+	}
+	
+	private static double[] getAfterIndex(double[] data, int indexToSplitAt) {
+		double[] resultRight = new double[data.length - indexToSplitAt];
+		
+		for(int i = indexToSplitAt; i < data.length; i++) {
+			resultRight[i - indexToSplitAt] = data[i];
+		}
+		
+		return resultRight;
 	}
 	
 	private static void play(QLearner learner) throws InterruptedException {
@@ -278,10 +434,20 @@ public class Main {
 		double[] totalBoltRewards = new double[bolts.size()];
 		double[] totalShapingRewards = new double[rewardShapers.size()];
 		
+		int stepAtWhichBoltSwitches = steps;
+		
+		for(RestrainingBolt b : bolts) {
+			b.reset();
+		}
+		
 		QLearner.History hist = learner.new History();
 		MovementHistory movementHist = new MovementHistory(steps, agent.x, agent.y);
 		double[] currentPotentials = getPotentialsForState();
 		for(int step = 0; step < steps; step++) {
+			
+			if(bolts.size() >= 1 && bolts.get(0).getCurrentState() == 1 && stepAtWhichBoltSwitches > step) {
+				stepAtWhichBoltSwitches = step;
+			}
 			
 			RewardBreakdown breakdown = computeAndApplyAction(learner, currentPotentials);
 			
@@ -295,11 +461,29 @@ public class Main {
 			env.dryout();
 		}
 		
+		if(stepAtWhichBoltSwitches != 100) {
+			System.out.println("beep" + stepAtWhichBoltSwitches);
+		}
+		
+		movementHist.stepAtWhichBoltSwitches = stepAtWhichBoltSwitches;
+		
 		return new HistoryWithRewardBreakdown(totalBaseReward, totalBoltRewards, totalShapingRewards, hist, movementHist);
 	}
 	
 	private static RewardHistories learn(QLearner learner, int episodes, int steps) {
 		RewardHistories fullHistory = new RewardHistories(episodes, bolts.size(), rewardShapers.size());
+		
+		/*for(int i = 0; i < downsampleFactor; i++) {
+			if(i%1000 == 0 && print) System.out.print("Episode: " + i);
+			
+			reset();
+			
+			HistoryWithRewardBreakdown hist = performSteps(learner, steps);
+			
+			if(i%1000 == 0 && print) System.out.println(" reward: " + hist.hist.getTotalReward());
+
+			fullHistory.addEntry(hist.totalBaseReward, hist.totalBoltRewards, hist.totalShapingRewards);
+		}*/
 		
 		for(int i = 0; i < episodes; i++) {
 			if(i%1000 == 0 && print) System.out.print("Episode: " + i);
@@ -373,6 +557,23 @@ public class Main {
 			return baseRewards.length;
 		}
 		
+		public static RewardHistories join(RewardHistories... histories) {
+			int totalNumberOfEpochs = 0;
+			for(RewardHistories rh : histories) {
+				totalNumberOfEpochs += rh.getLength();
+			}
+			
+			RewardHistories result = new RewardHistories(totalNumberOfEpochs, histories[0].boltRewards.length, histories[0].shapingRewards.length);
+			
+			for(RewardHistories rh : histories) {
+				for(int i = 0; i < rh.getLength(); i++) {
+					result.addEntry(rh.getBaseRewardAt(i), rh.getBoltRewardsAt(i), rh.getShapingRewardsAt(i));
+				}
+			}
+			
+			return result;
+		}
+		
 		public double[] getTotalUnshapedReward() {
 			double[] totalBoltReward = getTotalBoltReward();
 			double[] result = new double[getLength()];
@@ -416,6 +617,25 @@ public class Main {
 					downsample(this.boltRewards, factor), 
 					downsample(this.shapingRewards, factor)
 			);
+		}
+		
+		double getBaseRewardAt(int epoch) {
+			return baseRewards[epoch];
+		}
+		
+		double[] getBoltRewardsAt(int epoch) {
+			double[] result = new double[boltRewards.length];
+			for(int i = 0; i < result.length; i++) {
+				result[i] = boltRewards[i][epoch];
+			}
+			return result;
+		}
+		double[] getShapingRewardsAt(int epoch) {
+			double[] result = new double[shapingRewards.length];
+			for(int i = 0; i < result.length; i++) {
+				result[i] = shapingRewards[i][epoch];
+			}
+			return result;
 		}
 	}
 	
@@ -470,6 +690,7 @@ public class Main {
 		int[] xPositions;
 		int[] yPositions;
 		boolean[] wateredActions;
+		int stepAtWhichBoltSwitches;
 		
 		int curIndex = 1;
 		

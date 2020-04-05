@@ -32,7 +32,7 @@ public class AdvancedRestrainingBolt implements RestrainingBolt{
 		if (!this.isAllowedToWaterNeighbor){
 			Position nextPos = env.getPositionWhenMoving(agent.x, agent.y, Move.values()[action]);
 			if (this.agent.x > env.ourTomatoesWidth+1 && this.env.getTile(nextPos.x, nextPos.y) == Tile.UNWATERED_TOMATO){
-				return -20;
+				return -50;
 			}
 		}
 		return 0;
