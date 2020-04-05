@@ -21,7 +21,7 @@ public class Main {
 	static ArrayList<RestrainingBolt> bolts = new ArrayList<>();
 	static ArrayList<RewardShaper> rewardShapers = new ArrayList<>();
 	static final int actionCount = 100;
-	static final int learningEpochs = 200000;
+	static final int learningEpochs = 20000;
 	static final int downsampleFactor = 50;
 	static final boolean randomizeStart = false;
 	
@@ -36,18 +36,23 @@ public class Main {
 		QLearner learner = produceLearnerFor(0.3, 0.9, 0.5, bolts);
 		{
 			HistoryWithRewardBreakdown breakdown = performSteps(learner, 100);
-			XYChart moveChart = produceMovementChart(breakdown.movementHistory);
-			new SwingWrapper<XYChart>(moveChart).displayChart();
+			//XYChart moveChart = produceMovementChart(breakdown.movementHistory);
+			//new SwingWrapper<XYChart>(moveChart).displayChart();
 		}
 		RewardHistories rewardHistory = learn(learner, learningEpochs, actionCount);
 		{
 			HistoryWithRewardBreakdown breakdown = performSteps(learner, 100);
-			XYChart moveChart = produceMovementChart(breakdown.movementHistory);
-			new SwingWrapper<XYChart>(moveChart).displayChart();
+			//XYChart moveChart = produceMovementChart(breakdown.movementHistory);
+			//new SwingWrapper<XYChart>(moveChart).displayChart();
 		}
 		rewardShapers.add(new TomatoProximityShaper(env, agent, (dist) -> {return 5.0 / dist;}));
+		
 		//bolts.add(new BasicRestrainingBolt(env, agent));
+		
+		
 		bolts.add(new AdvancedRestrainingBolt(env, agent));
+		rewardShapers.add(new AdvancedRewardShaper(env, agent, 3, (dist) -> {return 5.0 / dist;}));
+
 
 		//rewardShapers.add(new RandomRewardShaper());
 		
@@ -83,7 +88,7 @@ public class Main {
 		series3.setFillColor(Color.GREEN.brighter());
 		series3.setMarkerColor(Color.GREEN.brighter());
 		
-		//new SwingWrapper<XYChart>(chart).displayChart();
+		new SwingWrapper<XYChart>(chart).displayChart();
 		
 		//BubbleChart bubbleChart = new BubbleChart(200, 200, ChartTheme.Matlab);
 		

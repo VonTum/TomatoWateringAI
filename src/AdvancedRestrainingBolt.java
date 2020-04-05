@@ -52,8 +52,8 @@ public class AdvancedRestrainingBolt implements RestrainingBolt{
 	private boolean checkState() {
 		boolean b = false;
 		//assumes our tomatoes are on x <= 3
-		if (this.agent.x > 3 && this.env.getTile(this.agent.x, this.agent.y) == Tile.UNWATERED_TOMATO){
-			if (checkOurTomatoesWatered()) b = true;					
+		if (checkOurTomatoesWatered() && this.agent.x > 3 && this.env.getTile(this.agent.x, this.agent.y) == Tile.UNWATERED_TOMATO){
+			b = true;					
 		}
 		return b;
 	}
