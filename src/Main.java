@@ -58,16 +58,12 @@ public class Main {
 			}
 		}
 		
-		
-		if(true) return;
-		
-		
 		// learningRate, discount, exploration
 		QLearner learner = produceLearnerFor(0.3, 0.9, 0.5, bolts);
 		{
 			HistoryWithRewardBreakdown breakdown = performSteps(learner, 100);
-			XYChart moveChart = produceMovementChart(breakdown.movementHistory);
-			new SwingWrapper<XYChart>(moveChart).displayChart();
+			//XYChart moveChart = produceMovementChart(breakdown.movementHistory);
+			//new SwingWrapper<XYChart>(moveChart).displayChart();
 		}
 		RewardHistories rewardHistory = learn(learner, learningEpochs / 2, actionCount);
 		
@@ -75,11 +71,15 @@ public class Main {
 		
 		{
 			HistoryWithRewardBreakdown breakdown = performSteps(learner, 100);
-			XYChart moveChart = produceMovementChart(breakdown.movementHistory);
-			new SwingWrapper<XYChart>(moveChart).displayChart();
+			//XYChart moveChart = produceMovementChart(breakdown.movementHistory);
+			//new SwingWrapper<XYChart>(moveChart).displayChart();
 		}
-		//rewardShapers.add(new TomatoProximityShaper(env, agent, (dist) -> {return 5.0 / dist;}));
+
+		rewardShapers.add(new TomatoProximityShaper(env, agent, (dist) -> {return 5.0 / dist;}));
+		
 		//bolts.add(new BasicRestrainingBolt(env, agent));
+		
+		
 		bolts.add(new AdvancedRestrainingBolt(env, agent));
 		
 		QLearner learnerWithBolt = learner.addObservable(bolts.get(0).getNumberOfStates());
@@ -111,6 +111,7 @@ public class Main {
 			
 			new SwingWrapper<XYChart>(boltRewardChart).displayChart();
 		}
+		rewardShapers.add(new AdvancedRewardShaper(env, agent, 3, (dist) -> {return 5.0 / dist;}));
 
 		//rewardShapers.add(new RandomRewardShaper());
 		
